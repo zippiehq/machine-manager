@@ -945,13 +945,6 @@ impl GrpcCartesiMachineClient {
         Ok(response.into_inner().success)
     }
 
-    /// Update the Merkle tree so it matches the contents of the remote machine state
-    pub async fn update_merkle_tree(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
-        let request = tonic::Request::new(Void {});
-        let response = self.client.verify_merkle_tree(request).await?; //TODO unknown fn update_merkle_tree
-        Ok(response.into_inner().success)
-    }
-
     /// Verify if dirty page maps are consistent on the remote machine
     pub async fn verify_dirty_page_maps(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
         let request = tonic::Request::new(Void {});

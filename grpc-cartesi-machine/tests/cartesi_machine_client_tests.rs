@@ -935,20 +935,7 @@ mod local_server {
         context_with_machine_future: impl Future<Output = Context>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut context = context_with_machine_future.await;
-        let ret = context.get_server().update_merkle_tree().await?;
-        assert!(ret);
         let ret = context.get_server().verify_merkle_tree().await?;
-        assert!(ret);
-        Ok(())
-    }
-
-    #[rstest]
-    #[tokio::test]
-    async fn test_update_merkle_tree(
-        context_with_machine_future: impl Future<Output = Context>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let mut context = context_with_machine_future.await;
-        let ret = context.get_server().update_merkle_tree().await?;
         assert!(ret);
         Ok(())
     }
@@ -991,7 +978,6 @@ mod local_server {
         context_with_machine_future: impl Future<Output = Context>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut context = context_with_machine_future.await;
-        context.get_server().update_merkle_tree().await?;
         let log = context
             .get_server()
             .step(
@@ -1015,7 +1001,6 @@ mod local_server {
         context_with_machine_future: impl Future<Output = Context>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut context = context_with_machine_future.await;
-        context.get_server().update_merkle_tree().await?;
         let root_hash_before = context.get_server().get_root_hash().await?;
         let log = context
             .get_server()
