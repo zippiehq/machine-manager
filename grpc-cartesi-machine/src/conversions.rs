@@ -10,7 +10,6 @@
 // specific language governing permissions and limitations under the License.
 
 use cartesi_grpc_interfaces::grpc_stubs;
-use cartesi_grpc_interfaces::grpc_stubs::cartesi_machine::*;
 
 impl From<&crate::MachineRuntimeConfig> for grpc_stubs::cartesi_machine::MachineRuntimeConfig {
     fn from(config: &crate::MachineRuntimeConfig) -> Self {

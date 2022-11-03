@@ -20,6 +20,7 @@ pub mod session_manager;
 use crate::server_manager::ServerManager;
 use crate::session::Session;
 use crate::session_manager::SessionManager;
+
 use async_mutex::{Mutex, MutexGuard};
 use cartesi_grpc_interfaces::grpc_stubs::cartesi_machine::machine_check_in_server::MachineCheckIn;
 use cartesi_grpc_interfaces::grpc_stubs::cartesi_machine::{
@@ -73,17 +74,17 @@ impl MachineCheckIn for ManagerCheckinService {
 
 /// Service that implements Machine Manager grpc api
 pub struct MachineManagerService {
-    session_manager: Arc<Mutex<dyn SessionManager>>,
+    pub session_manager: Arc<Mutex<dyn SessionManager>>,
+    pub shutting_down: bool,
 }
 
 impl MachineManagerService {
     pub fn new(session_manager: Arc<Mutex<dyn SessionManager>>) -> Self {
-        MachineManagerService { session_manager }
+        MachineManagerService { session_manager , shutting_down: false}
     }
-
     /// Check if session current request is same as pending request and return error.
     /// Otherwise, set pending request as current request
-    fn check_and_set_new_request(
+    pub fn check_and_set_new_request(
         session: &mut MutexGuard<Session>,
         request_info: &SessionRequest,
     ) -> Result<(), Status> {
@@ -111,7 +112,7 @@ impl MachineManagerService {
 
     /// If error string matches pattern, deduce tonic error type to be invalid argument. Otherwise,
     /// resulting type is internal error
-    fn deduce_tonic_error_type(error_str: &str, pattern: &str, message: &str) -> Status {
+    pub fn deduce_tonic_error_type(error_str: &str, pattern: &str, message: &str) -> Status {
         return if let Some(_) = error_str.find(pattern) {
             tonic::Status::invalid_argument(message)
         } else {
@@ -120,7 +121,7 @@ impl MachineManagerService {
     }
 
     /// Handling of the pending session run job request, depending on the current session job execution status.
-    async fn check_and_set_run_request(
+    pub async fn check_and_set_run_request(
         session_mut: Arc<Mutex<Session>>,
         request_info: &SessionRequest,
     ) -> Result<Option<Response<SessionRunResponse>>, Status> {
@@ -187,14 +188,14 @@ impl MachineManagerService {
     }
 
     /// Helper function to clear current request of the session
-    fn clear_request(session: &mut MutexGuard<Session>) {
+    pub fn clear_request(session: &mut MutexGuard<Session>) {
         session.clear_job();
         session.clear_request();
     }
 
     /// Helper function to find session by id in session manager. If not found
     /// return invalid argument error
-    async fn find_session(&self, session_id: &str) -> Result<Arc<Mutex<Session>>, Status> {
+    pub async fn find_session(&self, session_id: &str) -> Result<Arc<Mutex<Session>>, Status> {
         match self
             .session_manager
             .lock()
@@ -211,6 +212,12 @@ impl MachineManagerService {
             }
         }
     }
+
+    pub async fn shutting_down (
+        &self,
+    ) -> bool {
+        self.session_manager.lock().await.get_shutting_down_state() 
+    }
 }
 
 /// Implementation of the MachineManager service Protobuf API
@@ -221,6 +228,12 @@ impl MachineManager for MachineManagerService {
         &self,
         request: Request<NewSessionRequest>,
     ) -> Result<Response<Hash>, Status> {
+
+        if self.shutting_down().await{
+            let error_message = String::from("Server is shutting down, not accepting new requests");
+            return Err(tonic::Status::unavailable(error_message));
+        }
+
         let request_info = SessionRequest::from(&request);
         let new_session_request = request.into_inner();
         let session_id = &new_session_request.session_id;
@@ -322,7 +335,7 @@ impl MachineManager for MachineManagerService {
                             match session_manager
                                 .create_session_from_directory(
                                     session_id,
-                                    directory,
+                                    &directory,
                                     &runtime_config,
                                     &request_info,
                                     force,
@@ -409,6 +422,12 @@ impl MachineManager for MachineManagerService {
         &self,
         request: Request<SessionRunRequest>,
     ) -> Result<Response<SessionRunResponse>, Status> {
+
+        if self.shutting_down().await{
+            let error_message = String::from("Server is shutting down, not accepting new requests");
+            return Err(tonic::Status::unavailable(error_message));
+        }
+
         let request_info = SessionRequest::from(&request);
         let run_request = request.into_inner();
         log::info!(
@@ -484,6 +503,12 @@ impl MachineManager for MachineManagerService {
         &self,
         request: Request<SessionStepRequest>,
     ) -> Result<Response<SessionStepResponse>, Status> {
+
+        if self.shutting_down().await{
+            let error_message = String::from("Server is shutting down, not accepting new requests");
+            return Err(tonic::Status::unavailable(error_message));
+        }
+        
         let request_info = SessionRequest::from(&request);
         let step_request = request.into_inner();
         log::info!(

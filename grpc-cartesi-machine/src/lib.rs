@@ -624,7 +624,7 @@ impl From<&grpc_stubs::cartesi_machine::AccessLog> for AccessLog {
 }
 
 #[doc = "Client for Cartesi emulator machine server"]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GrpcCartesiMachineClient {
     server_address: String,
     client: MachineClient<tonic::transport::Channel>,
