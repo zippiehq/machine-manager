@@ -30,6 +30,7 @@ pub const WAIT_SLEEP_STEP: u64 = 100; //ms
 pub const WAIT_RETRIES_NUMBER: u64 = 200; // in total wait for check in 20s
 const RUN_STEP: u64 = 10_000_000; //Number of running cycles to run with one call to Cartesi emulator
 const RUN_STEPS_AT_ONCE: i32 = 10; //Number of steps to run at once in batch
+const MAX_CYCLE: u64 = 15;
 
 #[derive(Debug, Default)]
 /// Error type returned from session functions
@@ -190,6 +191,10 @@ pub struct Session {
 impl Session {
     /// Instantiate server using server manager and set Cartesi
     /// session client handle
+    
+    pub fn cartesi_session_client (&self) -> CartesiSessionMachineClient{
+        self.cartesi_session_client.clone()
+    }
     pub async fn setup_session_cartesi_server(
         &mut self,
         checkin_address: &str,
@@ -223,6 +228,10 @@ impl Session {
     /// Retrieve session id
     pub fn get_id(&self) -> &str {
         &self.id
+    }
+
+    pub fn get_server_manager(&self) -> &Arc<Mutex<dyn ServerManager>> {
+        &self.server_manager
     }
 
     /// Check if there is an active Cartesi machine client connection to
@@ -478,6 +487,7 @@ impl Session {
             )))
         }
     }
+
 
     /// Perform snapshot of machine instance on remote Cartesi machine emulator server
     /// On Cartesi machine server snapshot is implemented by forking process, and
@@ -805,6 +815,84 @@ impl Session {
         })
     }
 
+    pub async fn run_defective(
+        session_mut: Arc<Mutex<Session>>,
+        request_id: &str,
+        final_cycles: &[u64],
+    ) -> Result<SessionRunProgress, Box<dyn std::error::Error>> {
+
+        let mut modified_cycles: Vec<u64> = Vec::new();
+        for cycle in final_cycles {
+            if cycle >= &MAX_CYCLE {
+                modified_cycles.push(MAX_CYCLE);
+            }
+            else {
+                modified_cycles.push(*cycle);
+            }
+        }
+        
+        log::info!(
+            "Executing defective step.  Desired cycle: {:?}   Used cycle: {:?}",
+            modified_cycles, final_cycles
+        );
+
+        let session_run_result = Session::run(session_mut.clone(), request_id, &modified_cycles);
+        
+        log::debug!(
+            "Finished executing defective step.  Desired cycle: {:?}   Used cycle: {:?}",
+            modified_cycles, final_cycles
+        );
+        
+        match session_run_result.await{
+            Ok(session_result) => {
+                
+                let session_result = SessionRunProgress {
+                    progress: session_result.progress,
+                    application_progress: session_result.application_progress,
+                    updated_at: session_result.updated_at,
+                    cycle: final_cycles[0],
+                };
+
+                log::debug!(
+                    "Final response is: {:?}",
+                    session_result
+                );
+                Ok(session_result)
+            },
+            Err(e) => {
+                Err(e)
+            }
+        }
+        
+    }
+
+    pub async fn step_defective(
+        &mut self,
+        cycle: u64,
+        log_type: &grpc_cartesi_machine::AccessLogType,
+        one_based: bool,
+    ) -> Result<grpc_cartesi_machine::AccessLog, Box<dyn std::error::Error>> {
+        let mut modified_cycle = cycle;
+
+        if modified_cycle >= MAX_CYCLE {
+            modified_cycle = MAX_CYCLE
+        }
+
+        log::debug!(
+            "Executing defective step.  Desired cycle: {}   Used cycle: {}",
+            modified_cycle, cycle
+        );
+
+        let session_step_result = self.step(modified_cycle, log_type, one_based);  
+        
+        log::debug!(
+            "Finished executing defective step.  Desired cycle: {}   Used cycle: {}",
+            modified_cycle, cycle
+        );
+
+        session_step_result.await
+    }
+
     /// Perform step of machine instance on remote Cartesi machine emulator server
     pub async fn step(
         &mut self,
@@ -909,3 +997,4 @@ impl Session {
         Ok(())
     }
 }
+
